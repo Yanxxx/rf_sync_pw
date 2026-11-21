@@ -1,0 +1,15 @@
+load("//targets/lp_cc2652r7:ble.bzl", "lp_cc2652r7_ble_app")
+
+# TI basic_ble (BLE peripheral + central with a UART menu) on LP_CC2652R7,
+# ported from TI-RTOS7 to FreeRTOS + GCC + Pigweed.
+# Outputs: :basic_ble.elf, :basic_ble.bin
+lp_cc2652r7_ble_app(
+    name = "basic_ble",
+    srcs = glob([
+        "app/*.c",
+        "app/*.h",
+        "app/Profiles/*.c",
+    ]) + ["//apps/ble_common:startup_srcs"],
+    app_name = "basic_ble",
+    includes = ["app"],
+)

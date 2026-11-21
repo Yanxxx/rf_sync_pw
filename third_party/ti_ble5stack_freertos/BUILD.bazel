@@ -1,0 +1,14 @@
+# FreeRTOS port of TI's ICall layer for the CC26x2x7 BLE5 (ROM) stack.
+#
+# icall_POSIX.c = source/ti/ble5stack/common/cc26xx/freertos/icall_POSIX.c
+# from SDK 8.33.00.16, plus ICALL_NO_APP_EVENTS support (ICall_registerAppCback)
+# ported from the TI-RTOS source/ti/ble5stack/icall/src/icall.c.
+# The exact changes are in icall_POSIX.c.patch. License: TI BSD-3-Clause
+# (see the file header).
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "icall_POSIX.c",
+    "icall_POSIX.c.patch",
+])

@@ -1,0 +1,94 @@
+# Pigweed target for the TI LP_CC2652R7 LaunchPad (CC2652R7, Cortex-M4F)
+# running FreeRTOS, TI SimpleLink drivers and the BLE5 stack.
+
+load("@pigweed//pw_build:merge_flags.bzl", "flags_from_dict")
+load("@pigweed//third_party/freertos:flags.bzl", "FREERTOS_FLAGS")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["-layering_check"],
+)
+
+platform(
+    name = "lp_cc2652r7",
+    constraint_values = [
+        "@freertos//:port_ARM_CM4F",
+        "@freertos//:malloc_heap_4",
+        "@ti_simplelink_sdk//:cc26x2x7",
+        "@pigweed//pw_build/constraints/arm:cortex-m4",
+        "@pigweed//pw_build/constraints/rtos:freertos",
+        "@pigweed//pw_interrupt_cortex_m:compatible",
+        "@platforms//cpu:armv7e-m",
+        "@platforms//os:none",
+    ],
+    flags = flags_from_dict(FREERTOS_FLAGS | {
+        "@freertos//:freertos_config": "//targets/lp_cc2652r7:freertos_config",
+        "@pigweed//pw_assert:check_backend": "@pigweed//pw_assert_basic",
+        "@pigweed//pw_assert:check_backend_impl": "@pigweed//pw_assert_basic:impl",
+        "@pigweed//pw_build:default_module_config": "//targets/lp_cc2652r7:pigweed_module_config",
+        "@pigweed//pw_interrupt:backend": "@pigweed//pw_interrupt_cortex_m:context",
+        "@pigweed//pw_log:backend": "@pigweed//pw_log_basic",
+        "@pigweed//pw_log:backend_impl": "@pigweed//pw_log_basic:impl",
+        "@pigweed//pw_sys_io:backend": "//targets/lp_cc2652r7:sys_io_display",
+        "@pigweed//pw_unit_test:backend": "@pigweed//pw_unit_test:light",
+    }),
+)
+
+cc_library(
+    name = "pigweed_module_config",
+    defines = [
+        # After printing a crash, spin until a debugger attaches. The default
+        # (ABORT) calls std::abort(), which Pigweed's toolchain wraps into
+        # PW_CRASH again -> infinite recursion that overruns the stack.
+        "PW_ASSERT_BASIC_ACTION=PW_ASSERT_BASIC_ACTION_LOOP",
+        "PW_THREAD_FREERTOS_CONFIG_JOINING_ENABLED=1",
+    ],
+)
+
+# FreeRTOSConfig.h = SysConfig output (from apps/basic_ble) + Pigweed additions.
+cc_library(
+    name = "freertos_config",
+    hdrs = ["config/ti_syscfg_FreeRTOSConfig.h"],
+    includes = ["config"],
+    deps = ["//targets/ti_common:freertos_config_wrapper"],
+)
+
+cc_library(
+    name = "linker_script",
+    additional_linker_inputs = ["cc26x2x7_ble_freertos.lds"],
+    linkopts = [
+        "-T$(location cc26x2x7_ble_freertos.lds)",
+        # TI's startup code (resetISR) replaces crt0.
+        "-nostartfiles",
+    ],
+)
+
+# pw_log goes to the scrolling region of TI's UART Display (see the file).
+cc_library(
+    name = "sys_io_display",
+    srcs = ["sys_io_display.cc"],
+    deps = [
+        "@freertos",
+        "@pigweed//pw_interrupt:context",
+        "@pigweed//pw_status",
+        "@pigweed//pw_sys_io:pw_sys_io.facade",
+        "@ti_simplelink_sdk//:ble5stack_headers",
+    ],
+)
+
+# Everything a BLE app needs to run on this board except the stack glue
+# (compiled per app by ble.bzl): TI SDK (DPL, startup, POSIX, drivers),
+# linker script and Pigweed glue.
+cc_library(
+    name = "board",
+    deps = [
+        ":linker_script",
+        ":sys_io_display",
+        "//targets/ti_common:freertos_glue",
+        "@freertos",
+        "@pigweed//pw_toolchain/arm_gcc:arm_none_eabi_gcc_support",
+        "@ti_simplelink_sdk//:sdk",
+    ],
+    alwayslink = True,
+)

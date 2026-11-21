@@ -1,0 +1,37 @@
+# Code shared by all TI CC13x2x7/CC26x2x7 FreeRTOS boards in this repo.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(
+    default_visibility = ["//targets:__subpackages__"],
+    features = ["-layering_check"],
+)
+
+# FreeRTOSConfig.h wrapper: includes the board's SysConfig-generated
+# "ti_syscfg_FreeRTOSConfig.h" (provided by the board's :freertos_config
+# target) and adds the settings Pigweed needs.
+cc_library(
+    name = "freertos_config_wrapper",
+    hdrs = [
+        "config/FreeRTOSConfig.h",
+        # From FreeRTOS 11.3.2 (MIT). Needed because TI's config enables
+        # configUSE_NEWLIB_REENTRANT, but @freertos does not export it.
+        "config/newlib-freertos.h",
+    ],
+    includes = ["config"],
+    deps = ["@pigweed//third_party/freertos:config_assert"],
+)
+
+# Small pieces of SysConfig's ti_freertos_config.c that are not part of the
+# FreeRTOS kernel or TI DPL sources.
+cc_library(
+    name = "freertos_glue",
+    srcs = ["ti_freertos_glue.c"],
+    deps = [
+        "@freertos",
+        # Idle/timer task memory and stack-overflow hook (PW_CRASH with the
+        # task name). TI's StaticAllocs_freertos.c is not built.
+        "@pigweed//third_party/freertos:support",
+    ],
+    alwayslink = True,
+)

@@ -1,0 +1,32 @@
+# Bazel configuration shared by Linux, macOS and Windows.
+
+common --incompatible_default_to_explicit_init_py
+# Never use the host's system compiler: Pigweed provides hermetic toolchains.
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+common --experimental_exclude_defines_from_exec_config
+common --experimental_exclude_starlark_flags_from_exec_config
+build --incompatible_strict_action_env
+build --@rules_python//python/config_settings:exec_tools_toolchain=enabled
+common --legacy_external_runfiles=True
+
+# Third-party code (Pigweed, FreeRTOS, TI SDK) builds without warnings noise.
+common --per_file_copt=external/.*@-w
+common --host_per_file_copt=external/.*@-w
+
+build --strip=never
+common --verbose_failures
+test --test_output=errors
+common --ui_event_filters=-debug
+
+# Default target: LP_CC1312R7. `bazelisk build //...` builds its firmware and
+# skips targets for other boards. For LP_CC2652R7 (BLE) apps use
+# `bazelisk build --config=lp_cc2652r7 //...`.
+build --platforms=//targets/lp_cc1312r7:lp_cc1312r7
+build:lp_cc2652r7 --platforms=//targets/lp_cc2652r7:lp_cc2652r7
+
+# Windows-only settings live under the `windows` config.
+common --enable_platform_specific_config
+build:windows --enable_runfiles
+
+# Per-developer settings (e.g. TI SDK location). Not checked in.
+try-import %workspace%/user.bazelrc

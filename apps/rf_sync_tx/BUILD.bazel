@@ -1,0 +1,10 @@
+load("//targets/lp_cc1312r7:app.bzl", "lp_cc1312r7_app")
+
+# TI rfSynchronizedPacketTx: sends a beacon every 500 ms.
+# Outputs: :rf_sync_tx.elf, :rf_sync_tx.bin
+lp_cc1312r7_app(
+    name = "rf_sync_tx",
+    srcs = ["rfSynchronizedPacketTx.c"],
+    app_name = "rfSynchronizedPacketTx",
+    deps = ["//apps/common:state_machine"],
+)

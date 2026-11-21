@@ -1,0 +1,421 @@
+# BUILD file for the locally installed TI SimpleLink CC13xx/CC26xx SDK.
+# Instantiated as @ti_simplelink_sdk by //third_party/ti_simplelink:ti_sdk.bzl.
+#
+# Devices: CC13x2x7 (e.g. CC1312R7) and CC26x2x7 (e.g. CC2652R7), Cortex-M4F,
+# GCC, FreeRTOS. Each board's platform selects its family with one of the
+# :cc13x2x7 / :cc26x2x7 constraint values below.
+# The FreeRTOS kernel itself is NOT taken from the SDK: it comes from the
+# @freertos Bazel module so that Pigweed's FreeRTOS backends share it.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["-layering_check"],
+)
+
+constraint_setting(name = "device_family")
+
+constraint_value(
+    name = "cc13x2x7",
+    constraint_setting = ":device_family",
+)
+
+constraint_value(
+    name = "cc26x2x7",
+    constraint_setting = ":device_family",
+)
+
+# Keep in sync with SysConfig's ti_utils_build_compiler.opt.
+cc_library(
+    name = "device_defines",
+    defines = select({
+        ":cc13x2x7": ["DeviceFamily_CC13X2X7"],
+        ":cc26x2x7": ["DeviceFamily_CC26X2X7"],
+    }),
+)
+
+# TI driver/driverlib/log headers, included as <ti/...>.
+cc_library(
+    name = "headers",
+    hdrs = glob(
+        [
+            "source/ti/devices/DeviceFamily.h",
+            "source/ti/devices/cc13x2x7_cc26x2x7/**/*.h",
+            "source/ti/drivers/**/*.h",
+            "source/ti/log/**/*.h",
+            "source/ti/posix/freertos/*.h",
+        ],
+        allow_empty = False,
+    ),
+    includes = ["source"],
+    # ti_devices_config.c #includes the CCFG (customer configuration) source.
+    textual_hdrs = ["source/ti/devices/cc13x2x7_cc26x2x7/startup_files/ccfg.c"],
+    deps = [":device_defines"],
+)
+
+# TI's POSIX wrapper headers. They shadow newlib's <time.h>, <pthread.h>,
+# <semaphore.h>, ... so only code that wants TI POSIX should depend on this.
+cc_library(
+    name = "posix_headers",
+    hdrs = glob(["source/ti/posix/gcc/**/*.h"], allow_empty = False),
+    includes = ["source/ti/posix/gcc"],
+)
+
+# TI Driver Porting Layer (DPL) for FreeRTOS, startup code and POSIX layer.
+# This mirrors what SysConfig's ti_freertos_config.c pulls in, minus the
+# kernel sources and minus StaticAllocs_freertos.c (Pigweed's
+# //third_party/freertos:support provides the same idle/timer task memory
+# callbacks).
+cc_library(
+    name = "freertos_dpl",
+    srcs = [
+        "kernel/freertos/dpl/AppHooks_freertos.c",
+        "kernel/freertos/dpl/ClockPCC26X2_freertos.c",
+        "kernel/freertos/dpl/DebugP_freertos.c",
+        "kernel/freertos/dpl/EventP_freertos.c",
+        "kernel/freertos/dpl/HwiPCC26X2_freertos.c",
+        "kernel/freertos/dpl/MessageQueueP_freertos.c",
+        "kernel/freertos/dpl/MutexP_freertos.c",
+        "kernel/freertos/dpl/PowerCC26X2_freertos.c",
+        "kernel/freertos/dpl/QueueP_freertos.c",
+        "kernel/freertos/dpl/SemaphoreP_freertos.c",
+        "kernel/freertos/dpl/SwiP_freertos.c",
+        "kernel/freertos/dpl/SystemP_freertos.c",
+        "kernel/freertos/dpl/TaskP_freertos.c",
+        "kernel/freertos/dpl/TimerPCC26XX_freertos.c",
+        "kernel/freertos/dpl/TimestampPCC26XX_freertos.c",
+        "kernel/freertos/startup/startup_cc13x2_cc26x2_gcc.c",
+        "source/ti/posix/freertos/clock.c",
+        "source/ti/posix/freertos/memory.c",
+        "source/ti/posix/freertos/mqueue.c",
+        "source/ti/posix/freertos/pthread.c",
+        "source/ti/posix/freertos/pthread_barrier.c",
+        "source/ti/posix/freertos/pthread_cond.c",
+        "source/ti/posix/freertos/pthread_mutex.c",
+        "source/ti/posix/freertos/pthread_rwlock.c",
+        "source/ti/posix/freertos/sched.c",
+        "source/ti/posix/freertos/semaphore.c",
+        "source/ti/posix/freertos/sleep.c",
+        "source/ti/posix/freertos/timer.c",
+    ] + glob([
+        "kernel/freertos/dpl/*.h",
+        "source/ti/posix/freertos/*.h",
+    ]),
+    copts = [
+        "-std=c99",
+        "-w",
+    ],
+    includes = [
+        "kernel/freertos",
+        "kernel/freertos/dpl",
+    ],
+    local_defines = ["TI_POSIX_FREERTOS_MEMORY_ENABLEADV"],
+    deps = [
+        ":headers",
+        ":posix_headers",
+        "@freertos",
+    ],
+    alwayslink = True,
+)
+
+# TI libraries built from source. The SDK on GitHub ships these as sources
+# only (TI's installer also has prebuilt copies); the source lists follow TI's
+# source/ti/drivers/CMakeSources_cc13xx_cc26xx.cmake (SOURCES_CC13X2_CC26X2)
+# and source/ti/display/CMakeSources.cmake, and the flags follow TI's
+# source/cmake/toolchains/gcc.cmake (-std=c11 -O3). Drivers that need extra
+# third-party code (CAN/MCAN, SD/FatFS, PDM with its assembly codec) and the
+# LCD displays and DisplayExt (need grlib) are left out.
+# alwayslink: the prebuilt RF and BLE libraries (linked later) call into
+# these; unused code is removed by --gc-sections.
+_TI_LIB_COPTS = [
+    "-std=c11",
+    "-O3",
+    "-w",
+]
+
+cc_library(
+    name = "driverlib",
+    # rfc.c is excluded: the prebuilt RF driver library carries its own copy
+    # (with TI's prebuilt libraries the RF library's copy is the one linked).
+    srcs = glob(
+        ["source/ti/devices/cc13x2x7_cc26x2x7/driverlib/*.c"],
+        allow_empty = False,
+        exclude = ["source/ti/devices/cc13x2x7_cc26x2x7/driverlib/rfc.c"],
+    ),
+    copts = _TI_LIB_COPTS,
+    includes = ["source/ti/devices/cc13x2x7_cc26x2x7"],
+    deps = [":headers"],
+    alwayslink = True,
+)
+
+_DRIVERS_SRCS = [
+    # SOURCES_COMMON
+    "apps/Button.c",
+    "apps/LED.c",
+    "utils/List.c",
+    "utils/Math.c",
+    "utils/Random.c",
+    "utils/RingBuf.c",
+    "utils/StructRingBuf.c",
+    # SOURCES_CC13XX_CC26XX_COMMON
+    "ADC.c",
+    "adc/ADCCC26XX.c",
+    "ADCBuf.c",
+    "adcbuf/ADCBufCC26X2.c",
+    "AESCBC.c",
+    "AESCCM.c",
+    "AESCMAC.c",
+    "AESCTR.c",
+    "AESCTRDRBG.c",
+    "AESECB.c",
+    "ANSIX936KDF.c",
+    "ansix936kdf/ANSIX936KDFXX.c",
+    "cryptoutils/cryptokey/CryptoKey.c",
+    "cryptoutils/cryptokey/CryptoKeyPlaintext.c",
+    "cryptoutils/sharedresources/CryptoResourceCC26XX.c",
+    "cryptoutils/utils/CryptoUtils.c",
+    "DAC.c",
+    "dac/DACCC26X2.c",
+    "dma/UDMACC26XX.c",
+    "ECDH.c",
+    "ECDSA.c",
+    "GPIO.c",
+    "gpio/GPIOCC26XX.c",
+    "I2C.c",
+    "i2c/I2CCC26XX.c",
+    "I2S.c",
+    "i2s/I2SCC26XX.c",
+    "ITM.c",
+    "itm/ITMCC26XX.c",
+    "NVS.c",
+    "nvs/NVSCC26XX.c",
+    "nvs/NVSRAM.c",
+    "nvs/NVSSPI25X.c",
+    "power/PowerCC26X2.c",
+    "power/PowerCC26X2_calibrateRCOSC.c",
+    "PWM.c",
+    "pwm/PWMTimerCC26XX.c",
+    "RNG.c",
+    "rng/RNGCC26XX.c",
+    "SHA2.c",
+    "SPI.c",
+    "Temperature.c",
+    "temperature/TemperatureCC26X2.c",
+    "Timer.c",
+    "timer/GPTimerCC26XX.c",
+    "timer/TimerCC26XX.c",
+    "TRNG.c",
+    "UART2.c",
+    "uart2/UART2CC26X2.c",
+    "Watchdog.c",
+    # SOURCES_CC13X2_CC26X2
+    "aescbc/AESCBCCC26XX.c",
+    "aesccm/AESCCMCC26XX.c",
+    "aescmac/AESCMACCC26XX.c",
+    "aesctr/AESCTRCC26XX.c",
+    "aesctrdrbg/AESCTRDRBGXX.c",
+    "aesecb/AESECBCC26XX.c",
+    "AESGCM.c",
+    "aesgcm/AESGCMCC26XX.c",
+    "cryptoutils/ecc/ECCParamsCC26X2.c",
+    "cryptoutils/sharedresources/PKAResourceCC26XX.c",
+    "ecdh/ECDHCC26X2.c",
+    "ecdsa/ECDSACC26X2.c",
+    "ECJPAKE.c",
+    "ecjpake/ECJPAKECC26X2.c",
+    "EDDSA.c",
+    "eddsa/EDDSACC26X2.c",
+    "gpio/GPIOCC26X2.c",
+    "power/PowerCC26X2_calibrateRCOSC_helpers.c",
+    "power/PowerCC26X2_helpers.c",
+    "sha2/SHA2CC26X2.c",
+    "spi/SPICC26X2DMA.c",
+    "trng/TRNGCC26XX.c",
+    "watchdog/WatchdogCC26XX.c",
+]
+
+cc_library(
+    name = "drivers",
+    srcs = ["source/ti/drivers/" + f for f in _DRIVERS_SRCS],
+    copts = _TI_LIB_COPTS,
+    deps = [
+        ":driverlib",
+        ":headers",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "display",
+    srcs = [
+        "source/ti/display/Display.c",
+        "source/ti/display/DisplayHost.c",
+        "source/ti/display/DisplayUart2.c",
+    ],
+    hdrs = glob(["source/ti/display/*.h"]),
+    copts = _TI_LIB_COPTS,
+    deps = [
+        ":drivers",
+        ":headers",
+    ],
+    alwayslink = True,
+)
+
+# The RF driver is closed source; TI ships it prebuilt (also on GitHub).
+_RF_LIB = select({
+    ":cc13x2x7": ["source/ti/drivers/rf/lib/gcc/m4f/rf_multiMode_cc13x2.a"],
+    ":cc26x2x7": ["source/ti/drivers/rf/lib/gcc/m4f/rf_multiMode_cc26x2.a"],
+})
+
+cc_library(
+    name = "prebuilt_libs",
+    srcs = _RF_LIB,
+    deps = [
+        ":display",
+        ":drivers",
+        ":driverlib",
+    ],
+)
+
+# Everything a TI-drivers + FreeRTOS application needs from the SDK.
+cc_library(
+    name = "sdk",
+    deps = [
+        ":freertos_dpl",
+        ":headers",
+        ":posix_headers",
+        ":prebuilt_libs",
+    ],
+)
+
+# =============================================================================
+# BLE5 stack (CC26x2x7, ROM-based "agama" stack) on FreeRTOS + GCC.
+#
+# TI ships basic_ble for CC2652R7 only for TI-RTOS7 (TI Clang/IAR). The stack
+# libraries (OneLib.a / StackWrapper.a, built with IAR, EABI-compatible) do not
+# reference TI-RTOS; the RTOS-specific part is ICall, which this repo replaces
+# with //third_party/ti_ble5stack_freertos:icall_POSIX.c.
+#
+# The stack sources below must be compiled with the app's SysConfig output and
+# build options, so they are exported as file lists and compiled by
+# //targets/lp_cc2652r7:ble.bzl.
+# =============================================================================
+
+_BLE_INCLUDES = [
+    "source/ti",
+    "source/ti/ble5stack",
+    "source/ti/ble5stack/controller/cc26xx/inc",
+    "source/ti/ble5stack/inc",
+    "source/ti/ble5stack/rom",
+    "source/ti/ble5stack/common/cc26xx",
+    "source/ti/ble5stack/icall/inc",
+    "source/ti/ble5stack/hal/src/target/_common",
+    "source/ti/ble5stack/common/cc26xx/npi/stack",
+    "source/ti/ble5stack/hal/src/inc",
+    "source/ti/ble5stack/heapmgr",
+    "source/ti/ble5stack/profiles/dev_info",
+    "source/ti/ble5stack/profiles/simple_profile",
+    "source/ti/ble5stack/icall/src/inc",
+    "source/ti/ble5stack/npi/src",
+    "source/ti/ble5stack/osal/src/inc",
+    "source/ti/ble5stack/services/src/saddr",
+    "source/ti/ble5stack/services/src/sdata",
+    "source/ti/common/nv",
+    "source/ti/common/cc26xx",
+    "source/ti/ble5stack/icall/src",
+    "source/ti/drivers/dpl",
+    "source/ti/devices/cc13x2x7_cc26x2x7",
+    # bget.h for the FreeRTOS ICall port.
+    "source/ti/ble5stack/common/cc26xx/freertos",
+]
+
+cc_library(
+    name = "ble5stack_headers",
+    hdrs = glob(
+        [
+            "source/ti/ble5stack/**/*.h",
+            "source/ti/bleapp/**/*.h",
+            "source/ti/common/**/*.h",
+            "source/ti/display/*.h",
+            "source/ti/devices/cc13x2x7_cc26x2x7/**/*.h",
+        ],
+        allow_empty = False,
+    ),
+    includes = _BLE_INCLUDES,
+    deps = [
+        ":headers",
+        ":posix_headers",
+    ],
+)
+
+# TI's build passes these to the compiler as response files (-D options);
+# ble.bzl does the same.
+exports_files([
+    "source/ti/ble5stack/libraries/cc26x2r1/ble_r2.symbols",
+    "source/ti/ble5stack/config/build_components.opt",
+    "source/ti/ble5stack/config/factory_config.opt",
+])
+
+# Stack glue compiled with the app (same list as TI's basic_ble makefile,
+# minus icall.c which is TI-RTOS only).
+filegroup(
+    name = "ble5stack_icall_srcs",
+    srcs = [
+        "source/ti/ble5stack/icall/app/ble_stack_api.c",
+        "source/ti/ble5stack/icall/app/ble_user_config.c",
+        "source/ti/ble5stack/icall/app/icall_api_lite.c",
+        "source/ti/ble5stack/icall/src/icall_cc2650.c",
+        "source/ti/ble5stack/icall/src/icall_user_config.c",
+        "source/ti/ble5stack/icall/stack/ble_user_config_stack.c",
+        "source/ti/ble5stack/rom/agama_r1/rom_init.c",
+    ],
+)
+
+filegroup(
+    name = "bleapp_util_srcs",
+    srcs = [
+        "source/ti/bleapp/ble_app_util/src/bleapputil_init.c",
+        "source/ti/bleapp/ble_app_util/src/bleapputil_process.c",
+        "source/ti/bleapp/ble_app_util/src/bleapputil_stack_callbacks.c",
+        "source/ti/bleapp/ble_app_util/src/bleapputil_task.c",
+    ],
+)
+
+filegroup(
+    name = "bleapp_menu_srcs",
+    srcs = ["source/ti/bleapp/menu_module/menu_module.c"],
+)
+
+filegroup(
+    name = "bleapp_profile_srcs",
+    srcs = [
+        "source/ti/bleapp/profiles/simple_gatt/simple_gatt_profile.c",
+        "source/ti/bleapp/services/dev_info/dev_info_service.c",
+    ],
+)
+
+filegroup(
+    name = "nv_srcs",
+    srcs = [
+        "source/ti/common/nv/crc.c",
+        "source/ti/common/nv/nvocmp.c",
+    ],
+)
+
+# Prebuilt stack. The ROM symbol file (ble_r2.symbols, an ELF file holding the
+# addresses of the stack in the CC26x2 ROM) is linked with --just-symbols by
+# @rf_sync_pw//third_party/ti_simplelink:ble_rom_symbols after removing a few
+# IAR runtime symbols. The TI driver libraries are repeated in the group because the stack calls
+# into them (RF, TRNG, AESCTRDRBG, ...).
+_BLE_LIBS = [
+    "source/ti/ble5stack/libraries/cc26x2r1/OneLib.a",
+    "source/ti/ble5stack/libraries/cc26x2r1/StackWrapper.a",
+]
+
+cc_library(
+    name = "ble5stack_libs",
+    additional_linker_inputs = _BLE_LIBS,
+    linkopts = ["-Wl,--start-group"] + ["$(location {})".format(l) for l in _BLE_LIBS] + ["-Wl,--end-group"],
+    target_compatible_with = [":cc26x2x7"],
+)

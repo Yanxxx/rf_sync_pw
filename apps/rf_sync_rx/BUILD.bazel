@@ -1,0 +1,11 @@
+load("//targets/lp_cc1312r7:app.bzl", "lp_cc1312r7_app")
+
+# TI rfSynchronizedPacketRx: wakes up just before each beacon from
+# rf_sync_tx and receives it.
+# Outputs: :rf_sync_rx.elf, :rf_sync_rx.bin
+lp_cc1312r7_app(
+    name = "rf_sync_rx",
+    srcs = ["rfSynchronizedPacketRx.c"],
+    app_name = "rfSynchronizedPacketRx",
+    deps = ["//apps/common:state_machine"],
+)

@@ -1,0 +1,32 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(
+    default_visibility = ["//apps:__subpackages__"],
+    features = ["-layering_check"],
+)
+
+# Code shared by rfSynchronizedPacketTx and rfSynchronizedPacketRx
+# (identical in both TI examples).
+cc_library(
+    name = "state_machine",
+    srcs = ["StateMachine.c"],
+    hdrs = [
+        "StateMachine.h",
+        "rfSynchronizedPacket.h",
+    ],
+    copts = [
+        "-std=c99",
+        "-Wno-strict-prototypes",
+        "-Wno-unused-parameter",
+    ],
+    includes = ["."],
+    target_compatible_with = ["@platforms//os:none"],
+    deps = [
+        "@ti_simplelink_sdk//:headers",
+        "@ti_simplelink_sdk//:posix_headers",
+    ],
+)
+
+# main() for TI-style apps that provide mainThread(). APP_NAME is defined by
+# the lp_cc1312r7_app() macro, which compiles this file once per app.
+exports_files(["main.cc"])

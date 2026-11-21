@@ -1,0 +1,80 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build: LP_CC1312R7 apps",
+            "detail": "rf_sync_tx, rf_sync_rx (first run downloads Bazel, toolchain, TI SDK)",
+            "type": "process",
+            "command": "python3",
+            "windows": { "command": "python" },
+            "args": ["tools/bazel.py", "build", "//..."],
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "Build: LP_CC2652R7 BLE apps",
+            "detail": "basic_ble, ble_led_peripheral, ble_led_central",
+            "type": "process",
+            "command": "python3",
+            "windows": { "command": "python" },
+            "args": ["tools/bazel.py", "build", "--config=lp_cc2652r7", "//..."],
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "Flash app",
+            "detail": "Build + flash via XDS110 (needs TI UniFlash). Leave the serial empty if only one board is connected.",
+            "type": "process",
+            "command": "python3",
+            "windows": { "command": "python" },
+            "args": ["tools/flash.py", "${input:app}", "--serial", "${input:serial}"],
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "List connected boards (XDS110 serials)",
+            "type": "process",
+            "command": "python3",
+            "windows": { "command": "python" },
+            "args": ["tools/flash.py", "--list"],
+            "problemMatcher": []
+        },
+        {
+            "label": "SysConfig: regenerate all apps",
+            "detail": "Only needed after editing a .syscfg (needs TI SysConfig + a local TI SDK)",
+            "type": "process",
+            "command": "python3",
+            "windows": { "command": "python" },
+            "args": ["tools/syscfg_gen.py", "--all"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Clean",
+            "type": "process",
+            "command": "python3",
+            "windows": { "command": "python" },
+            "args": ["tools/bazel.py", "clean"],
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "app",
+            "type": "pickString",
+            "description": "App to flash",
+            "options": [
+                "rf_sync_tx",
+                "rf_sync_rx",
+                "basic_ble",
+                "ble_led_link:ble_led_peripheral",
+                "ble_led_link:ble_led_central"
+            ],
+            "default": "rf_sync_tx"
+        },
+        {
+            "id": "serial",
+            "type": "promptString",
+            "description": "XDS110 serial number (empty = the only connected board; see 'List connected boards')",
+            "default": ""
+        }
+    ]
+}

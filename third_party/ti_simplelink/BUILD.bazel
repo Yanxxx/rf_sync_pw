@@ -1,0 +1,28 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load(":strip_symbols.bzl", "strip_symbols")
+
+package(default_visibility = ["//visibility:public"])
+
+# Addresses of the BLE5 stack functions/variables in the CC26x2 ROM.
+# TI's ble_r2.symbols also carries IAR runtime symbols from the ROM image
+# (__exit, __checksum*). They are not part of the stack API and __exit clashes
+# with Pigweed's newlib stubs, so they are removed before linking.
+strip_symbols(
+    name = "ble_r2_symbols",
+    src = "@ti_simplelink_sdk//:source/ti/ble5stack/libraries/cc26x2r1/ble_r2.symbols",
+    out = "ble_r2_stack.symbols",
+    symbols = [
+        "__exit",
+        "__checksum",
+        "__checksum_begin",
+        "__checksum_end",
+        "__checksum_value",
+    ],
+)
+
+cc_library(
+    name = "ble_rom_symbols",
+    additional_linker_inputs = [":ble_r2_symbols"],
+    linkopts = ["-Wl,--just-symbols=$(location :ble_r2_symbols)"],
+    target_compatible_with = ["@ti_simplelink_sdk//:cc26x2x7"],
+)

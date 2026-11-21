@@ -1,0 +1,12 @@
+# Startup code shared by the BLE5-stack apps on LP_CC2652R7.
+#   startup/main.c           main(): board init, ICall, appMain(), scheduler.
+#   startup/osal_icall_ble.c OSAL task table for the stack (TI, unchanged).
+package(default_visibility = ["//apps:__subpackages__"])
+
+filegroup(
+    name = "startup_srcs",
+    srcs = [
+        "startup/main.c",
+        "startup/osal_icall_ble.c",
+    ],
+)

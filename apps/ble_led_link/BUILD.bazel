@@ -1,0 +1,52 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//targets/lp_cc2652r7:ble.bzl", "lp_cc2652r7_ble_app")
+
+# BLE link test between two LP_CC2652R7 boards (see led_link.c).
+#   :ble_led_peripheral.elf  advertises "PW-LED-P", receives writes
+#   :ble_led_central.elf     connects to it and writes 0/1 every LED_LINK_PERIOD_MS (led_link.h)
+# LEDs on both boards: RED (D106) = connected, GREEN (D107) = last value.
+
+# Stack glue without TI's MenuModule (this app has no menu; it opens the
+# UART Display itself for pw_log).
+_STACK_SRCS = [
+    "@ti_simplelink_sdk//:ble5stack_icall_srcs",
+    "@ti_simplelink_sdk//:bleapp_util_srcs",
+    "@ti_simplelink_sdk//:bleapp_profile_srcs",
+    "@ti_simplelink_sdk//:nv_srcs",
+    "//third_party/ti_ble5stack_freertos:icall_POSIX.c",
+]
+
+# Periodic tick using pw::Thread (C++, Pigweed FreeRTOS backend).
+cc_library(
+    name = "timer",
+    srcs = ["led_link_timer.cc"],
+    hdrs = ["led_link.h"],
+    target_compatible_with = ["@ti_simplelink_sdk//:cc26x2x7"],
+    deps = [
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_thread:sleep",
+        "@pigweed//pw_thread:thread",
+        "@pigweed//pw_thread_freertos:thread",
+    ],
+)
+
+[
+    lp_cc2652r7_ble_app(
+        name = name,
+        srcs = [
+            "led_link.c",
+            "app_main.h",
+            "led_link.h",
+            "//apps/ble_common:startup_srcs",
+        ],
+        app_defines = defines,
+        app_deps = [":timer"],
+        app_name = name,
+        includes = ["."],
+        stack_srcs = _STACK_SRCS,
+    )
+    for name, defines in [
+        ("ble_led_peripheral", []),
+        ("ble_led_central", ["LED_LINK_CENTRAL"]),
+    ]
+]

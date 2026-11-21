@@ -1,0 +1,44 @@
+"""rf_sync_pw: TI CC1312R7 rfSynchronizedPacketTx built with Pigweed + Bazel."""
+
+module(name = "rf_sync_pw")
+
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
+bazel_dep(name = "freertos", version = "11.3.2")
+bazel_dep(name = "pigweed")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_cc", version = "0.2.22")
+bazel_dep(name = "rules_python", version = "2.4.6")
+
+# Pigweed is consumed at a pinned commit (same pin as Pigweed's quickstart).
+# To upgrade: change `commit`, then `bazelisk build //...`.
+git_override(
+    module_name = "pigweed",
+    commit = "d7878d4ed9f1ea2ff539077534f52f419f9afa34",
+    remote = "https://pigweed.googlesource.com/pigweed/pigweed",
+)
+
+# Hermetic toolchains: Bazel downloads Arm GCC and host Clang for each OS,
+# so Linux, macOS and Windows build with the same compiler.
+register_toolchains(
+    "@pigweed//pw_toolchain:cc_toolchain_cortex-m4",
+    "@pigweed//pw_toolchain/host_clang:host_cc_toolchain_linux",
+    "@pigweed//pw_toolchain/host_clang:host_cc_toolchain_macos",
+    dev_dependency = True,
+)
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = "3.12",
+)
+
+# TI SimpleLink CC13xx/CC26xx SDK 8.33.00.16, fetched from TI's GitHub repo
+# (sparse, ~15 MB). Set TI_SIMPLELINK_SDK to use a local install instead.
+ti_simplelink_sdk = use_repo_rule("//third_party/ti_simplelink:ti_sdk.bzl", "ti_simplelink_sdk")
+
+ti_simplelink_sdk(
+    name = "ti_simplelink_sdk",
+    build_file = "//third_party/ti_simplelink:ti_sdk.BUILD.bazel",
+    commit = "3615ad5d3f4f271258d18a2f5ce1785064ff9a58",
+    tag = "lpf2-8.33.00.16",
+)

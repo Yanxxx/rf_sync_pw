@@ -1,0 +1,9 @@
+# Bazel outputs
+/bazel-*
+# Per-developer Bazel settings (TI SDK path, etc.)
+/user.bazelrc
+# Python
+__pycache__/
+# IDE
+/compile_commands.json
+/.cache/

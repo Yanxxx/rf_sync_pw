@@ -1,0 +1,10 @@
+# Copy to user.bazelrc (not checked in) and adjust for your machine.
+# Only needed if the TI SDK is NOT in the default location:
+#   Linux/macOS: ~/ti/simplelink_cc13xx_cc26xx_sdk_8_33_00_16
+#   Windows:     C:/ti/simplelink_cc13xx_cc26xx_sdk_8_33_00_16
+# Use forward slashes on Windows too.
+
+# common --repo_env=TI_SIMPLELINK_SDK=/path/to/simplelink_cc13xx_cc26xx_sdk_8_33_00_16
+
+# Windows only (requires Developer Mode, recommended by Pigweed):
+# startup --windows_enable_symlinks
